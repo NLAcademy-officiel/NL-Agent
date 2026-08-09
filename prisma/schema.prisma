@@ -1,0 +1,25 @@
+// ==============================================================================
+// NL AGENT — Schéma Prisma (placeholder Phase 1)
+// ------------------------------------------------------------------------------
+// Aucun modèle métier n'est encore défini : la base de données PostgreSQL
+// n'est pas connectée à ce stade (voir README, section "Phase 1 vs phases
+// suivantes"). Ce fichier sert uniquement à valider que l'outillage Prisma
+// est correctement installé et prêt à recevoir le schéma réel en Phase 2
+// (User, Organization, Agent, Conversation, Lead, Subscription, etc.).
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modèle temporaire, à supprimer dès l'introduction du schéma métier réel.
+model HealthCheck {
+  id        String   @id @default(cuid())
+  status    String   @default("ok")
+  createdAt DateTime @default(now())
+}
