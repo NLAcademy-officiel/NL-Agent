@@ -1,25 +1,334 @@
-// ==============================================================================
-// NL AGENT — Schéma Prisma (placeholder Phase 1)
-// ------------------------------------------------------------------------------
-// Aucun modèle métier n'est encore défini : la base de données PostgreSQL
-// n'est pas connectée à ce stade (voir README, section "Phase 1 vs phases
-// suivantes"). Ce fichier sert uniquement à valider que l'outillage Prisma
-// est correctement installé et prêt à recevoir le schéma réel en Phase 2
-// (User, Organization, Agent, Conversation, Lead, Subscription, etc.).
-// ==============================================================================
-
 generator client {
-  provider = "prisma-client-js"
+provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+provider = "postgresql"
+url = env("DATABASE_URL")
 }
 
-// Modèle temporaire, à supprimer dès l'introduction du schéma métier réel.
-model HealthCheck {
-  id        String   @id @default(cuid())
-  status    String   @default("ok")
-  createdAt DateTime @default(now())
+enum UserRole {
+OWNER
+ADMIN
+MEMBER
+}
+
+enum AgentStatus {
+ACTIVE
+INACTIVE
+}
+
+enum ChannelType {
+WEBSITE
+WHATSAPP
+}
+
+enum LeadStatus {
+NEW
+CONTACTED
+QUALIFIED
+NEGOTIATION
+WON
+LOST
+}
+
+enum ConversationStatus {
+OPEN
+PENDING
+CLOSED
+}
+
+enum MessageDirection {
+INBOUND
+OUTBOUND
+}
+
+enum MessageType {
+TEXT
+IMAGE
+DOCUMENT
+AUDIO
+VIDEO
+OTHER
+}
+
+enum SenderType {
+CONTACT
+AGENT
+HUMAN
+SYSTEM
+}
+
+enum PaymentStatus {
+PENDING
+SUBMITTED
+VERIFIED
+REJECTED
+}
+
+enum SubscriptionStatus {
+ACTIVE
+PAST_DUE
+CANCELLED
+EXPIRED
+TRIAL
+}
+
+model User {
+id String @id @default(cuid())
+email String @unique
+name String?
+passwordHash String?
+role UserRole @default(MEMBER)
+organizationId String
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+}
+
+model Organization {
+id String @id @default(cuid())
+name String
+slug String @unique
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+users User[]
+agents Agent[]
+channels Channel[]
+contacts Contact[]
+leads Lead[]
+conversations Conversation[]
+paymentInstructions PaymentInstruction[]
+subscriptions ChariowSubscription[]
+usage Usage[]
+}
+
+model Agent {
+id String @id @default(cuid())
+name String
+description String?
+systemPrompt String?
+status AgentStatus @default(ACTIVE)
+organizationId String
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+knowledge AgentKnowledge[]
+conversations Conversation[]
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+}
+
+model Channel {
+id String @id @default(cuid())
+type ChannelType
+name String
+organizationId String
+isActive Boolean @default(true)
+configuration Json?
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+conversations Conversation[]
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+@@index([type])
+}
+
+model Contact {
+id String @id @default(cuid())
+organizationId String
+name String?
+email String?
+phone String?
+whatsappId String?
+metadata Json?
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+lead Lead?
+conversations Conversation[]
+paymentProofs PaymentProof[]
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+@@index([phone])
+@@index([whatsappId])
+}
+
+model Lead {
+id String @id @default(cuid())
+organizationId String
+contactId String @unique
+status LeadStatus @default(NEW)
+source String?
+notes String?
+score Int?
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+@@index([status])
+}
+
+model Conversation {
+id String @id @default(cuid())
+organizationId String
+agentId String?
+channelId String
+contactId String
+status ConversationStatus @default(OPEN)
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+agent Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+messages Message[]
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+@@index([contactId])
+@@index([channelId])
+@@index([agentId])
+}
+
+model Message {
+id String @id @default(cuid())
+conversationId String
+direction MessageDirection
+type MessageType @default(TEXT)
+senderType SenderType
+content String?
+externalId String?
+metadata Json?
+
+conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+attachments MessageAttachment[]
+
+createdAt DateTime @default(now())
+
+@@index([conversationId])
+@@index([externalId])
+}
+
+model MessageAttachment {
+id String @id @default(cuid())
+messageId String
+url String
+fileName String?
+mimeType String?
+size Int?
+
+message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+
+@@index([messageId])
+}
+
+model AgentKnowledge {
+id String @id @default(cuid())
+agentId String
+title String
+content String
+
+agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([agentId])
+}
+
+model PaymentInstruction {
+id String @id @default(cuid())
+organizationId String
+title String
+description String?
+paymentLink String?
+accountNumber String?
+instructions String?
+isActive Boolean @default(true)
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+proofs PaymentProof[]
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+}
+
+model PaymentProof {
+id String @id @default(cuid())
+paymentInstructionId String
+contactId String
+amount Decimal?
+currency String?
+proofUrl String
+status PaymentStatus @default(SUBMITTED)
+verifiedBy String?
+verifiedAt DateTime?
+notes String?
+
+paymentInstruction PaymentInstruction @relation(fields: [paymentInstructionId], references: [id], onDelete: Cascade)
+contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([contactId])
+@@index([status])
+}
+
+model ChariowSubscription {
+id String @id @default(cuid())
+organizationId String
+externalId String?
+productId String?
+planName String?
+status SubscriptionStatus @default(TRIAL)
+startedAt DateTime?
+expiresAt DateTime?
+metadata Json?
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
+@@index([externalId])
+@@index([status])
+}
+
+model Usage {
+id String @id @default(cuid())
+organizationId String
+periodStart DateTime
+periodEnd DateTime
+messages Int @default(0)
+aiRequests Int @default(0)
+conversations Int @default(0)
+
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+@@index([organizationId])
 }
