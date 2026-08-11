@@ -26,8 +26,6 @@ export async function POST(request: Request) {
       },
       select: {
         id: true,
-        email: true,
-        name: true,
         passwordHash: true,
         role: true,
         organizationId: true,
@@ -59,10 +57,8 @@ export async function POST(request: Request) {
 
     const token = await createSession({
       userId: user.id,
-      email: user.email,
-      name: user.name ?? "",
-      role: user.role,
       organizationId: user.organizationId,
+      role: user.role,
     });
 
     const response = NextResponse.json({
