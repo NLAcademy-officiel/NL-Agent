@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { DashboardTopbar } from "@/components/dashboard/topbar";
@@ -41,25 +41,29 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function loadSettings() {
-    try {
-      const response = await fetch("/api/organization/settings");
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const response = await fetch("/api/organization/settings");
 
-      if (!response.ok) {
-        router.push("/auth/login");
-        return;
+        if (!response.ok) {
+          router.push("/auth/login");
+          return;
+        }
+
+        const result: SettingsData = await response.json();
+
+        setData(result);
+        setName(result.organization.name);
+      } catch {
+        setError("Impossible de charger les informations.");
+      } finally {
+        setLoading(false);
       }
-
-      const result = await response.json();
-
-      setData(result);
-      setName(result.organization.name);
-    } catch {
-      setError("Impossible de charger les informations.");
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadSettings();
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,7 +79,7 @@ export default function SettingsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
+          name: name.trim(),
         }),
       });
 
@@ -114,8 +118,6 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    loadSettings();
-
     return (
       <>
         <DashboardTopbar title="Profil & Organisation" />
@@ -243,7 +245,9 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <p className="text-xs text-white/40">Slug</p>
+                <p className="text-xs text-white/40">
+                  Slug
+                </p>
 
                 <p className="mt-1 text-sm text-white">
                   {data.organization.slug}
@@ -275,7 +279,10 @@ export default function SettingsPage() {
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
+            <form
+              onSubmit={handleSubmit}
+              className="max-w-xl space-y-4"
+            >
               <div>
                 <Label htmlFor="organization-name">
                   Nom de l'entreprise
@@ -284,7 +291,9 @@ export default function SettingsPage() {
                 <Input
                   id="organization-name"
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) =>
+                    setName(event.target.value)
+                  }
                   placeholder="Nom de votre entreprise"
                   maxLength={100}
                   required
