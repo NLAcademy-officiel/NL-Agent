@@ -167,10 +167,10 @@ export async function POST(request: Request) {
 }
 
 /*
- * PUT
+ * PATCH
  * Modifier une connaissance existante
  */
-export async function PUT(request: Request) {
+export async function PATCH(request: Request) {
   try {
     const session = await getAuthenticatedSession();
 
@@ -287,7 +287,10 @@ export async function PUT(request: Request) {
 
 /*
  * DELETE
- * Supprimer une connaissance
+ * Supprimer une connaissance existante
+ *
+ * Le frontend envoie :
+ * /api/agent/knowledge?id=xxxxx
  */
 export async function DELETE(request: Request) {
   try {
@@ -302,9 +305,9 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const { searchParams } = new URL(request.url);
 
-    const id = String(body.id ?? "").trim();
+    const id = searchParams.get("id")?.trim();
 
     if (!id) {
       return NextResponse.json(
