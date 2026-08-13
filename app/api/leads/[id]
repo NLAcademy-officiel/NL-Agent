@@ -1,0 +1,281 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+
+import { prisma } from "@/lib/database/prisma";
+import { getSession } from "@/lib/auth/session";
+
+const SESSION_COOKIE = "nl_agent_session";
+
+async function getAuthenticatedSession() {
+  const cookieStore = cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return null;
+  }
+
+  return getSession(token);
+}
+
+/*
+ * GET
+ * Récupérer un prospect avec ses informations
+ * et son historique de conversations.
+ */
+export async function GET(
+  request: Request,
+  context: {
+    params: {
+      id: string;
+    };
+  }
+) {
+  try {
+    const session = await getAuthenticatedSession();
+
+    if (!session) {
+      return NextResponse.json(
+        {
+          error: "Non authentifié.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const leadId = context.params.id;
+
+    if (!leadId) {
+      return NextResponse.json(
+        {
+          error:
+            "L'identifiant du prospect est obligatoire.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id: leadId,
+        organizationId: session.organizationId,
+      },
+      include: {
+        contact: true,
+        conversations: {
+          orderBy: {
+            updatedAt: "desc",
+          },
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!lead) {
+      return NextResponse.json(
+        {
+          error: "Prospect introuvable.",
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      lead,
+    });
+  } catch (error) {
+    console.error("Get lead detail error:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de récupérer les informations du prospect.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/*
+ * PATCH
+ * Modifier rapidement le statut,
+ * le score ou les notes d'un prospect.
+ */
+export async function PATCH(
+  request: Request,
+  context: {
+    params: {
+      id: string;
+    };
+  }
+) {
+  try {
+    const session = await getAuthenticatedSession();
+
+    if (!session) {
+      return NextResponse.json(
+        {
+          error: "Non authentifié.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const leadId = context.params.id;
+
+    if (!leadId) {
+      return NextResponse.json(
+        {
+          error:
+            "L'identifiant du prospect est obligatoire.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const existingLead =
+      await prisma.lead.findFirst({
+        where: {
+          id: leadId,
+          organizationId:
+            session.organizationId,
+        },
+      });
+
+    if (!existingLead) {
+      return NextResponse.json(
+        {
+          error: "Prospect introuvable.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const body = await request.json();
+
+    const status =
+      body.status !== undefined
+        ? String(body.status)
+        : undefined;
+
+    const notes =
+      body.notes !== undefined
+        ? String(body.notes).trim()
+        : undefined;
+
+    const source =
+      body.source !== undefined
+        ? String(body.source).trim()
+        : undefined;
+
+    const score =
+      body.score !== undefined &&
+      body.score !== null &&
+      body.score !== ""
+        ? Number(body.score)
+        : undefined;
+
+    const validStatuses = [
+      "NEW",
+      "CONTACTED",
+      "QUALIFIED",
+      "NEGOTIATION",
+      "WON",
+      "LOST",
+    ];
+
+    if (
+      status &&
+      !validStatuses.includes(status)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Statut de prospect invalide.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      score !== undefined &&
+      (Number.isNaN(score) ||
+        score < 0 ||
+        score > 100)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Le score doit être compris entre 0 et 100.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const lead = await prisma.lead.update({
+      where: {
+        id: existingLead.id,
+      },
+      data: {
+        ...(status && {
+          status: status as
+            | "NEW"
+            | "CONTACTED"
+            | "QUALIFIED"
+            | "NEGOTIATION"
+            | "WON"
+            | "LOST",
+        }),
+
+        ...(notes !== undefined && {
+          notes: notes || null,
+        }),
+
+        ...(source !== undefined && {
+          source: source || null,
+        }),
+
+        ...(score !== undefined && {
+          score,
+        }),
+      },
+      include: {
+        contact: true,
+        conversations: {
+          orderBy: {
+            updatedAt: "desc",
+          },
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      lead,
+      message:
+        "Prospect mis à jour avec succès.",
+    });
+  } catch (error) {
+    console.error("Patch lead error:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de mettre à jour le prospect.",
+      },
+      { status: 500 }
+    );
+  }
+}
