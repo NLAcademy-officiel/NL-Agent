@@ -24,35 +24,31 @@ type Knowledge = {
 };
 
 export default function KnowledgePage() {
-  const [knowledge, setKnowledge] = useState<Knowledge[]>(
-    []
-  );
+  const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] =
-    useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   /*
-   * Charger la base de connaissances
+   * Charger les connaissances
    */
   async function loadKnowledge() {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        "/api/agent/knowledge",
-        {
-          cache: "no-store",
-        }
-      );
+      const response = await fetch("/api/agent/knowledge", {
+        cache: "no-store",
+      });
 
       const result = await response.json();
 
@@ -65,10 +61,7 @@ export default function KnowledgePage() {
 
       setKnowledge(result.knowledge || []);
     } catch (error) {
-      console.error(
-        "Load knowledge error:",
-        error
-      );
+      console.error("Load knowledge error:", error);
 
       setError(
         "Impossible de charger la base de connaissances."
@@ -83,7 +76,7 @@ export default function KnowledgePage() {
   }, []);
 
   /*
-   * Ajouter une connaissance
+   * Ajouter ou modifier une connaissance
    */
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -105,17 +98,27 @@ export default function KnowledgePage() {
     setMessage("");
 
     try {
+      const isEditing = Boolean(editingId);
+
       const response = await fetch(
         "/api/agent/knowledge",
         {
-          method: "POST",
+          method: isEditing ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            title: trimmedTitle,
-            content: trimmedContent,
-          }),
+          body: JSON.stringify(
+            isEditing
+              ? {
+                  id: editingId,
+                  title: trimmedTitle,
+                  content: trimmedContent,
+                }
+              : {
+                  title: trimmedTitle,
+                  content: trimmedContent,
+                }
+          ),
         }
       );
 
@@ -124,25 +127,40 @@ export default function KnowledgePage() {
       if (!response.ok) {
         setError(
           result.error ||
-            "Impossible d'ajouter la connaissance."
+            "Impossible d'enregistrer la connaissance."
         );
         return;
       }
 
-      setKnowledge((current) => [
-        ...current,
-        result.knowledge,
-      ]);
+      if (isEditing) {
+        setKnowledge((current) =>
+          current.map((item) =>
+            item.id === result.knowledge.id
+              ? result.knowledge
+              : item
+          )
+        );
+
+        setMessage(
+          "Connaissance mise à jour avec succès."
+        );
+      } else {
+        setKnowledge((current) => [
+          ...current,
+          result.knowledge,
+        ]);
+
+        setMessage(
+          "Connaissance ajoutée avec succès."
+        );
+      }
 
       setTitle("");
       setContent("");
-
-      setMessage(
-        "Connaissance ajoutée avec succès."
-      );
+      setEditingId(null);
     } catch (error) {
       console.error(
-        "Create knowledge error:",
+        "Save knowledge error:",
         error
       );
 
@@ -152,6 +170,34 @@ export default function KnowledgePage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /*
+   * Activer le mode modification
+   */
+  function handleEdit(item: Knowledge) {
+    setEditingId(item.id);
+    setTitle(item.title);
+    setContent(item.content);
+
+    setMessage("");
+    setError("");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  /*
+   * Annuler la modification
+   */
+  function handleCancelEdit() {
+    setEditingId(null);
+    setTitle("");
+    setContent("");
+    setMessage("");
+    setError("");
   }
 
   /*
@@ -198,6 +244,12 @@ export default function KnowledgePage() {
         current.filter((item) => item.id !== id)
       );
 
+      if (editingId === id) {
+        setEditingId(null);
+        setTitle("");
+        setContent("");
+      }
+
       setMessage(
         "Connaissance supprimée avec succès."
       );
@@ -230,8 +282,8 @@ export default function KnowledgePage() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm text-white/60">
-            Ajoutez les informations que votre agent IA
-            doit connaître sur votre entreprise.
+            Ajoutez et gérez les informations que votre
+            agent IA doit connaître sur NLAcademy.
           </p>
         </div>
 
@@ -248,16 +300,19 @@ export default function KnowledgePage() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          {/* Ajouter une connaissance */}
+          {/* Formulaire */}
           <Card>
             <CardHeader>
               <CardTitle>
-                Ajouter une connaissance
+                {editingId
+                  ? "Modifier une connaissance"
+                  : "Ajouter une connaissance"}
               </CardTitle>
 
               <CardDescription>
-                Donnez à votre agent des informations
-                fiables sur NLAcademy.
+                {editingId
+                  ? "Modifiez les informations sélectionnées."
+                  : "Donnez à votre agent des informations fiables sur NLAcademy."}
               </CardDescription>
             </CardHeader>
 
@@ -301,23 +356,37 @@ export default function KnowledgePage() {
                   />
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={
-                    saving ||
-                    !title.trim() ||
-                    !content.trim()
-                  }
-                >
-                  {saving
-                    ? "Ajout..."
-                    : "Ajouter la connaissance"}
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="submit"
+                    disabled={
+                      saving ||
+                      !title.trim() ||
+                      !content.trim()
+                    }
+                  >
+                    {saving
+                      ? "Enregistrement..."
+                      : editingId
+                      ? "Enregistrer les modifications"
+                      : "Ajouter la connaissance"}
+                  </Button>
+
+                  {editingId && (
+                    <Button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={saving}
+                    >
+                      Annuler
+                    </Button>
+                  )}
+                </div>
               </form>
             </CardContent>
           </Card>
 
-          {/* Liste des connaissances */}
+          {/* Liste */}
           <Card>
             <CardHeader>
               <CardTitle>
@@ -349,8 +418,7 @@ export default function KnowledgePage() {
 
                   <p className="mt-2 text-sm text-white/40">
                     Ajoutez les premières informations
-                    de NLAcademy pour permettre à votre
-                    agent de mieux répondre aux prospects.
+                    de NLAcademy.
                   </p>
                 </div>
               ) : (
@@ -361,7 +429,7 @@ export default function KnowledgePage() {
                       className="rounded-lg border border-line bg-ink p-4"
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <h3 className="text-sm font-semibold text-white">
                             {item.title}
                           </h3>
@@ -370,6 +438,20 @@ export default function KnowledgePage() {
                             {item.content}
                           </p>
                         </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          onClick={() =>
+                            handleEdit(item)
+                          }
+                          disabled={
+                            deletingId === item.id
+                          }
+                        >
+                          Modifier
+                        </Button>
 
                         <Button
                           type="button"
@@ -381,7 +463,7 @@ export default function KnowledgePage() {
                           }
                         >
                           {deletingId === item.id
-                            ? "..."
+                            ? "Suppression..."
                             : "Supprimer"}
                         </Button>
                       </div>
