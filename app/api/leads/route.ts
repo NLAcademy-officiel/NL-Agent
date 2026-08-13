@@ -34,7 +34,38 @@ export async function GET() {
         { status: 401 }
       );
     }
-    /*
+
+    const leads = await prisma.lead.findMany({
+      where: {
+        organizationId: session.organizationId,
+      },
+      include: {
+        contact: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      leads,
+      count: leads.length,
+    });
+  } catch (error) {
+    console.error("Get leads error:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de récupérer les prospects.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/*
  * POST
  * Créer un nouveau prospect avec son contact.
  */
@@ -183,36 +214,6 @@ export async function POST(request: Request) {
       {
         error:
           "Impossible de créer le prospect.",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-    const leads = await prisma.lead.findMany({
-      where: {
-        organizationId: session.organizationId,
-      },
-      include: {
-        contact: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      leads,
-      count: leads.length,
-    });
-  } catch (error) {
-    console.error("Get leads error:", error);
-
-    return NextResponse.json(
-      {
-        error:
-          "Impossible de récupérer les prospects.",
       },
       { status: 500 }
     );
