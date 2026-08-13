@@ -55,7 +55,41 @@ export async function POST(request: Request) {
     }
 
     /*
-     * 3. Récupération de l'agent
+     * 3. Identification du contact
+     *
+     * Pour le moment, l'interface de test n'envoie pas
+     * encore d'e-mail ou de téléphone.
+     *
+     * On utilise donc un contact de test unique
+     * pour l'organisation.
+     */
+    let contact = await prisma.contact.findFirst({
+      where: {
+        organizationId: session.organizationId,
+        metadata: {
+          path: ["source"],
+          equals: "dashboard_chat",
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    if (!contact) {
+      contact = await prisma.contact.create({
+        data: {
+          organizationId: session.organizationId,
+          name: "Prospect test",
+          metadata: {
+            source: "dashboard_chat",
+          },
+        },
+      });
+    }
+
+    /*
+     * 4. Récupération de l'agent
      */
     const agent = await prisma.agent.findFirst({
       where: {
@@ -76,7 +110,7 @@ export async function POST(request: Request) {
     }
 
     /*
-     * 4. Vérification du statut
+     * 5. Vérification du statut
      */
     if (agent.status !== "ACTIVE") {
       return NextResponse.json(
@@ -88,7 +122,83 @@ export async function POST(request: Request) {
     }
 
     /*
-     * 5. Récupération des connaissances
+     * 6. Récupération ou création du canal WEBSITE
+     */
+    let channel = await prisma.channel.findFirst({
+      where: {
+        organizationId: session.organizationId,
+        type: "WEBSITE",
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    if (!channel) {
+      channel = await prisma.channel.create({
+        data: {
+          organizationId: session.organizationId,
+          type: "WEBSITE",
+          name: "Dashboard Chat",
+          isActive: true,
+        },
+      });
+    }
+
+    /*
+     * 7. Récupération ou création de la conversation
+     */
+    let conversation = await prisma.conversation.findFirst({
+      where: {
+        organizationId: session.organizationId,
+        contactId: contact.id,
+        channelId: channel.id,
+        status: {
+          in: ["OPEN", "PENDING"],
+        },
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          organizationId: session.organizationId,
+          agentId: agent.id,
+          channelId: channel.id,
+          contactId: contact.id,
+          status: "OPEN",
+        },
+      });
+    } else if (conversation.agentId !== agent.id) {
+      conversation = await prisma.conversation.update({
+        where: {
+          id: conversation.id,
+        },
+        data: {
+          agentId: agent.id,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    /*
+     * 8. Enregistrement du message entrant
+     */
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "INBOUND",
+        type: "TEXT",
+        senderType: "CONTACT",
+        content: message,
+      },
+    });
+
+    /*
+     * 9. Récupération des connaissances
      */
     const knowledge = await prisma.agentKnowledge.findMany({
       where: {
@@ -104,7 +214,7 @@ export async function POST(request: Request) {
     });
 
     /*
-     * 6. Construction de la base de connaissances
+     * 10. Construction de la base de connaissances
      */
     const knowledgeText =
       knowledge.length > 0
@@ -117,7 +227,7 @@ export async function POST(request: Request) {
         : "Aucune connaissance supplémentaire n'a été fournie.";
 
     /*
-     * 7. Instructions de base de l'agent
+     * 11. Instructions de base de l'agent
      */
     const defaultInstructions = `
 Tu es un assistant IA professionnel.
@@ -161,25 +271,60 @@ ${knowledgeText}
 `;
 
     /*
-     * 8. Appel OpenAI
+     * 12. Récupération de l'historique
+     *
+     * Cela permet à l'agent de comprendre le contexte
+     * de la conversation.
      */
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: systemInstructions,
-        },
-        {
-          role: "user",
-          content: message,
-        },
-      ],
+    const history = await prisma.message.findMany({
+      where: {
+        conversationId: conversation.id,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      take: 20,
+      select: {
+        direction: true,
+        content: true,
+      },
     });
 
+    const chatMessages = [
+      {
+        role: "system" as const,
+        content: systemInstructions,
+      },
+      ...history
+        .filter(
+          (
+            item
+          ): item is {
+            direction: "INBOUND" | "OUTBOUND";
+            content: string;
+          } => Boolean(item.content)
+        )
+        .map((item) => ({
+          role:
+            item.direction === "INBOUND"
+              ? ("user" as const)
+              : ("assistant" as const),
+          content: item.content as string,
+        })),
+    ];
+
     /*
-     * 9. Récupération de la réponse
+     * 13. Appel OpenAI
+     */
+    const completion =
+      await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.3,
+        messages: chatMessages,
+      });
+
+    /*
+     * 14. Récupération de la réponse
      */
     const reply =
       completion.choices[0]?.message?.content?.trim();
@@ -195,15 +340,48 @@ ${knowledgeText}
     }
 
     /*
-     * 10. Retour de la réponse
+     * 15. Enregistrement de la réponse de l'agent
+     */
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        type: "TEXT",
+        senderType: "AGENT",
+        content: reply,
+        metadata: {
+          model: "gpt-4o-mini",
+        },
+      },
+    });
+
+    /*
+     * 16. Mise à jour de la conversation
+     */
+    await prisma.conversation.update({
+      where: {
+        id: conversation.id,
+      },
+      data: {
+        updatedAt: new Date(),
+      },
+    });
+
+    /*
+     * 17. Retour au frontend
      */
     return NextResponse.json({
       success: true,
+
+      conversationId: conversation.id,
+
       agent: {
         id: agent.id,
         name: agent.name,
       },
+
       reply,
+
       language: "auto",
     });
   } catch (error) {
