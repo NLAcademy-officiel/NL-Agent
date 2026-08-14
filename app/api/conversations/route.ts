@@ -19,7 +19,8 @@ async function getAuthenticatedSession() {
 
 /**
  * GET
- * Récupère les conversations de l'organisation connectée.
+ * Récupère toutes les conversations
+ * de l'organisation connectée.
  */
 export async function GET() {
   try {
@@ -27,40 +28,48 @@ export async function GET() {
 
     if (!session) {
       return NextResponse.json(
-        { error: "Non authentifié." },
+        {
+          error: "Non authentifié.",
+        },
         { status: 401 }
       );
     }
 
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        organizationId: session.organizationId,
-      },
-      include: {
-        contact: true,
-        agent: true,
-        channel: true,
-        messages: {
-          orderBy: {
-            createdAt: "asc",
+    const conversations =
+      await prisma.conversation.findMany({
+        where: {
+          organizationId: session.organizationId,
+        },
+        include: {
+          contact: true,
+          agent: true,
+          channel: true,
+          messages: {
+            orderBy: {
+              createdAt: "asc",
+            },
           },
         },
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-    });
+        orderBy: {
+          updatedAt: "desc",
+        },
+      });
 
     return NextResponse.json({
       success: true,
       conversations,
+      count: conversations.length,
     });
   } catch (error) {
-    console.error("Get conversations error:", error);
+    console.error(
+      "Get conversations error:",
+      error
+    );
 
     return NextResponse.json(
       {
-        error: "Impossible de récupérer les conversations.",
+        error:
+          "Impossible de récupérer les conversations.",
       },
       { status: 500 }
     );
@@ -70,182 +79,297 @@ export async function GET() {
 /**
  * POST
  * Crée une nouvelle conversation.
+ *
+ * Le contact est recherché par e-mail ou téléphone.
+ * S'il n'existe pas, il est créé.
+ *
+ * Une conversation est ensuite créée avec :
+ * - le premier agent actif disponible ;
+ * - un canal WEBSITE ;
+ * - le contact identifié.
+ *
+ * Un Lead est également créé automatiquement
+ * s'il n'existe pas déjà pour ce contact.
  */
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    const session = await getAuthenticatedSession();
+    const session =
+      await getAuthenticatedSession();
 
     if (!session) {
       return NextResponse.json(
-        { error: "Non authentifié." },
+        {
+          error: "Non authentifié.",
+        },
         { status: 401 }
       );
     }
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
 
-    const name = String(body.name ?? "").trim();
-    const email = String(body.email ?? "")
-      .trim()
-      .toLowerCase();
-    const phone = String(body.phone ?? "").trim();
-
-    if (!name && !email && !phone) {
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
         {
-          error:
-            "Au moins un nom, une adresse e-mail ou un numéro de téléphone est requis.",
+          error: "Corps de requête invalide.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * Recherche d'un contact existant.
+    const name =
+      typeof body.name === "string"
+        ? body.name.trim()
+        : "";
+
+    const email =
+      typeof body.email === "string"
+        ? body.email.trim().toLowerCase()
+        : "";
+
+    const phone =
+      typeof body.phone === "string"
+        ? body.phone.trim()
+        : "";
+
+    const whatsappId =
+      typeof body.whatsappId === "string"
+        ? body.whatsappId.trim()
+        : "";
+
+    const channelType =
+      typeof body.channelType === "string"
+        ? body.channelType.trim().toUpperCase()
+        : "WEBSITE";
+
+    if (
+      !name &&
+      !email &&
+      !phone &&
+      !whatsappId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Au moins un nom, une adresse e-mail, un numéro de téléphone ou un identifiant WhatsApp est requis.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /**
+     * Vérification du canal demandé.
      *
-     * On limite toujours la recherche à l'organisation
-     * actuellement connectée.
+     * Le schéma Prisma accepte actuellement :
+     * WEBSITE
+     * WHATSAPP
      */
-    let contact = null;
-
-    if (email) {
-      contact = await prisma.contact.findFirst({
-        where: {
-          organizationId: session.organizationId,
-          email,
+    if (
+      channelType !== "WEBSITE" &&
+      channelType !== "WHATSAPP"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Type de canal invalide. Utilisez WEBSITE ou WHATSAPP.",
         },
-      });
+        { status: 400 }
+      );
     }
 
-    if (!contact && phone) {
-      contact = await prisma.contact.findFirst({
+    /**
+     * Recherche du contact existant.
+     *
+     * IMPORTANT :
+     * La recherche est toujours limitée
+     * à l'organisation connectée.
+     */
+    let contact =
+      await prisma.contact.findFirst({
         where: {
-          organizationId: session.organizationId,
-          phone,
+          organizationId:
+            session.organizationId,
+          OR: [
+            ...(email
+              ? [{ email }]
+              : []),
+            ...(phone
+              ? [{ phone }]
+              : []),
+            ...(whatsappId
+              ? [{ whatsappId }]
+              : []),
+          ],
         },
       });
-    }
 
-    /*
-     * Si le contact n'existe pas encore,
-     * on le crée.
+    /**
+     * Création ou mise à jour du contact.
      */
     if (!contact) {
-      contact = await prisma.contact.create({
-        data: {
-          organizationId: session.organizationId,
-          name: name || null,
-          email: email || null,
-          phone: phone || null,
-        },
-      });
+      contact =
+        await prisma.contact.create({
+          data: {
+            organizationId:
+              session.organizationId,
+            name: name || null,
+            email: email || null,
+            phone: phone || null,
+            whatsappId:
+              whatsappId || null,
+          },
+        });
     } else {
-      /*
-       * Mise à jour des informations disponibles
-       * si le contact existe déjà.
-       */
-      contact = await prisma.contact.update({
-        where: {
-          id: contact.id,
-        },
-        data: {
-          ...(name ? { name } : {}),
-          ...(email ? { email } : {}),
-          ...(phone ? { phone } : {}),
-        },
-      });
+      contact =
+        await prisma.contact.update({
+          where: {
+            id: contact.id,
+          },
+          data: {
+            ...(name
+              ? { name }
+              : {}),
+            ...(email
+              ? { email }
+              : {}),
+            ...(phone
+              ? { phone }
+              : {}),
+            ...(whatsappId
+              ? { whatsappId }
+              : {}),
+          },
+        });
     }
 
-    /*
-     * Récupération du premier agent actif
+    /**
+     * Recherche du premier agent actif
      * de l'organisation.
      */
-    const agent = await prisma.agent.findFirst({
-      where: {
-        organizationId: session.organizationId,
-        status: "ACTIVE",
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
-
-    /*
-     * Récupération d'un canal WEBSITE.
-     */
-    let channel = await prisma.channel.findFirst({
-      where: {
-        organizationId: session.organizationId,
-        type: "WEBSITE",
-      },
-    });
-
-    /*
-     * Si aucun canal WEBSITE n'existe encore,
-     * on le crée automatiquement.
-     */
-    if (!channel) {
-      channel = await prisma.channel.create({
-        data: {
-          organizationId: session.organizationId,
-          type: "WEBSITE",
-          name: "Site Web",
-          isActive: true,
+    const agent =
+      await prisma.agent.findFirst({
+        where: {
+          organizationId:
+            session.organizationId,
+          status: "ACTIVE",
+        },
+        orderBy: {
+          createdAt: "asc",
         },
       });
+
+    /**
+     * Recherche du canal demandé.
+     */
+    let channel =
+      await prisma.channel.findFirst({
+        where: {
+          organizationId:
+            session.organizationId,
+          type: channelType as
+            | "WEBSITE"
+            | "WHATSAPP",
+        },
+      });
+
+    /**
+     * Création automatique du canal
+     * s'il n'existe pas.
+     */
+    if (!channel) {
+      channel =
+        await prisma.channel.create({
+          data: {
+            organizationId:
+              session.organizationId,
+            type: channelType as
+              | "WEBSITE"
+              | "WHATSAPP",
+            name:
+              channelType === "WHATSAPP"
+                ? "WhatsApp"
+                : "Site Web",
+            isActive: true,
+          },
+        });
     }
 
-    /*
+    /**
      * Création de la conversation.
      */
-    const conversation = await prisma.conversation.create({
-      data: {
-        organizationId: session.organizationId,
-        agentId: agent?.id ?? null,
-        channelId: channel.id,
-        contactId: contact.id,
-        status: "OPEN",
-      },
-      include: {
-        contact: true,
-        agent: true,
-        channel: true,
-        messages: true,
-      },
-    });
+    const conversation =
+      await prisma.conversation.create({
+        data: {
+          organizationId:
+            session.organizationId,
+          agentId:
+            agent?.id ?? null,
+          channelId: channel.id,
+          contactId: contact.id,
+          status: "OPEN",
+        },
+        include: {
+          contact: true,
+          agent: true,
+          channel: true,
+          messages: {
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+        },
+      });
 
-    /*
+    /**
      * Création automatique du Lead.
      *
-     * Un contact ne peut avoir qu'un seul Lead
-     * grâce à contactId @unique dans Prisma.
+     * Grâce à contactId @unique dans Prisma,
+     * un contact ne peut avoir qu'un seul Lead.
      */
-    await prisma.lead.upsert({
-      where: {
-        contactId: contact.id,
-      },
-      update: {},
-      create: {
-        organizationId: session.organizationId,
-        contactId: contact.id,
-        status: "NEW",
-        source: "WEBSITE",
-      },
-    });
+    const lead =
+      await prisma.lead.upsert({
+        where: {
+          contactId: contact.id,
+        },
+        update: {},
+        create: {
+          organizationId:
+            session.organizationId,
+          contactId: contact.id,
+          status: "NEW",
+          source:
+            channelType === "WHATSAPP"
+              ? "WHATSAPP"
+              : "WEBSITE",
+        },
+        include: {
+          contact: true,
+        },
+      });
 
     return NextResponse.json(
       {
         success: true,
         conversation,
+        lead,
+        message:
+          "Conversation créée avec succès.",
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create conversation error:", error);
+    console.error(
+      "Create conversation error:",
+      error
+    );
 
     return NextResponse.json(
       {
-        error: "Impossible de créer la conversation.",
+        error:
+          "Impossible de créer la conversation.",
       },
       { status: 500 }
     );
