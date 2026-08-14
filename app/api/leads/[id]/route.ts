@@ -30,14 +30,6 @@ async function getAuthenticatedSession() {
 
 /**
  * GET /api/leads/[id]
- *
- * Récupère un prospect avec :
- * - ses informations de contact
- * - ses conversations
- * - les messages de chaque conversation
- *
- * Le prospect doit appartenir à l'organisation
- * de l'utilisateur connecté.
  */
 export async function GET(
   request: Request,
@@ -72,17 +64,18 @@ export async function GET(
         organizationId: session.organizationId,
       },
       include: {
-        contact: true,
-
-        conversations: {
-          orderBy: {
-            updatedAt: "desc",
-          },
-
+        contact: {
           include: {
-            messages: {
+            conversations: {
               orderBy: {
-                createdAt: "asc",
+                updatedAt: "desc",
+              },
+              include: {
+                messages: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
               },
             },
           },
@@ -99,10 +92,15 @@ export async function GET(
       );
     }
 
+    const conversations = lead.contact.conversations;
+
     return NextResponse.json({
       success: true,
-      lead,
-      conversations: lead.conversations,
+      lead: {
+        ...lead,
+        conversations,
+      },
+      conversations,
     });
   } catch (error) {
     console.error("Get lead error:", error);
@@ -118,15 +116,6 @@ export async function GET(
 
 /**
  * PATCH /api/leads/[id]
- *
- * Met à jour :
- * - le statut
- * - le score
- * - les notes
- * - la source
- *
- * Le prospect doit appartenir à l'organisation
- * de l'utilisateur connecté.
  */
 export async function PATCH(
   request: Request,
@@ -184,9 +173,6 @@ export async function PATCH(
       );
     }
 
-    /**
-     * STATUS
-     */
     let status: LeadStatus | undefined;
 
     if (body.status !== undefined) {
@@ -209,15 +195,9 @@ export async function PATCH(
       status = requestedStatus as LeadStatus;
     }
 
-    /**
-     * SCORE
-     */
     let score: number | null | undefined = undefined;
 
-    if (
-      body.score === null ||
-      body.score === ""
-    ) {
+    if (body.score === null || body.score === "") {
       score = null;
     } else if (body.score !== undefined) {
       const numericScore = Number(body.score);
@@ -240,9 +220,6 @@ export async function PATCH(
       score = numericScore;
     }
 
-    /**
-     * NOTES
-     */
     let notes: string | null | undefined = undefined;
 
     if (body.notes !== undefined) {
@@ -256,9 +233,6 @@ export async function PATCH(
       }
     }
 
-    /**
-     * SOURCE
-     */
     let source: string | null | undefined = undefined;
 
     if (body.source !== undefined) {
@@ -272,14 +246,10 @@ export async function PATCH(
       }
     }
 
-    /**
-     * Mise à jour
-     */
     const updatedLead = await prisma.lead.update({
       where: {
         id: leadId,
       },
-
       data: {
         ...(status !== undefined && {
           status,
@@ -297,19 +267,19 @@ export async function PATCH(
           source,
         }),
       },
-
       include: {
-        contact: true,
-
-        conversations: {
-          orderBy: {
-            updatedAt: "desc",
-          },
-
+        contact: {
           include: {
-            messages: {
+            conversations: {
               orderBy: {
-                createdAt: "asc",
+                updatedAt: "desc",
+              },
+              include: {
+                messages: {
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
               },
             },
           },
@@ -317,10 +287,16 @@ export async function PATCH(
       },
     });
 
+    const conversations =
+      updatedLead.contact.conversations;
+
     return NextResponse.json({
       success: true,
-      lead: updatedLead,
-      conversations: updatedLead.conversations,
+      lead: {
+        ...updatedLead,
+        conversations,
+      },
+      conversations,
       message: "Prospect mis à jour avec succès.",
     });
   } catch (error) {
