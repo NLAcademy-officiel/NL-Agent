@@ -33,8 +33,10 @@ type Contact = {
 
 type Message = {
   id: string;
-  role: string;
-  content: string;
+  role?: string;
+  direction?: string;
+  senderType?: string;
+  content: string | null;
   createdAt: string;
 };
 
@@ -82,9 +84,7 @@ export default function LeadDetailPage() {
     ? params.id[0]
     : params.id;
 
-  const [lead, setLead] = useState<Lead | null>(
-    null
-  );
+  const [lead, setLead] = useState<Lead | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -98,9 +98,6 @@ export default function LeadDetailPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  /*
-   * Charger le prospect
-   */
   async function loadLead() {
     try {
       setLoading(true);
@@ -123,7 +120,6 @@ export default function LeadDetailPage() {
       }
 
       setLead(result.lead);
-
       setStatus(result.lead.status);
 
       setScore(
@@ -155,9 +151,6 @@ export default function LeadDetailPage() {
     }
   }, [leadId]);
 
-  /*
-   * Sauvegarder les modifications
-   */
   async function handleSave() {
     if (!lead) {
       return;
@@ -197,7 +190,6 @@ export default function LeadDetailPage() {
       }
 
       setLead(result.lead);
-
       setStatus(result.lead.status);
 
       setScore(
@@ -225,9 +217,6 @@ export default function LeadDetailPage() {
     }
   }
 
-  /*
-   * Formatage des dates
-   */
   function formatDate(date: string) {
     return new Intl.DateTimeFormat("fr-FR", {
       day: "2-digit",
@@ -236,6 +225,89 @@ export default function LeadDetailPage() {
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(date));
+  }
+
+  function cleanPhoneNumber(
+    value: string | null
+  ) {
+    if (!value) {
+      return "";
+    }
+
+    return value.replace(/[^\d+]/g, "");
+  }
+
+  function getWhatsAppNumber() {
+    const value =
+      lead?.contact.whatsappId ||
+      lead?.contact.phone ||
+      "";
+
+    return cleanPhoneNumber(value).replace(
+      /^\+/,
+      ""
+    );
+  }
+
+  function handleWhatsApp() {
+    const number = getWhatsAppNumber();
+
+    if (!number) {
+      setError(
+        "Aucun numéro WhatsApp n'est renseigné pour ce prospect."
+      );
+      setMessage("");
+      return;
+    }
+
+    window.open(
+      `https://wa.me/${number}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function handleCall() {
+    const phone = cleanPhoneNumber(
+      lead?.contact.phone || null
+    );
+
+    if (!phone) {
+      setError(
+        "Aucun numéro de téléphone n'est renseigné pour ce prospect."
+      );
+      setMessage("");
+      return;
+    }
+
+    window.location.href = `tel:${phone}`;
+  }
+
+  function handleEmail() {
+    const email = lead?.contact.email;
+
+    if (!email) {
+      setError(
+        "Aucune adresse email n'est renseignée pour ce prospect."
+      );
+      setMessage("");
+      return;
+    }
+
+    const subject = encodeURIComponent(
+      "NLAcademy — Votre demande"
+    );
+
+    const body = encodeURIComponent(
+      `Bonjour ${lead?.contact.name || ""},
+
+Nous revenons vers vous concernant votre demande auprès de NLAcademy.
+
+Cordialement,
+NLAcademy`
+    );
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
   }
 
   if (loading) {
@@ -283,7 +355,6 @@ export default function LeadDetailPage() {
       <DashboardTopbar title="Détail du prospect" />
 
       <div className="p-6">
-        {/* EN-TÊTE */}
         <div className="mb-6">
           <Link
             href="/dashboard/leads"
@@ -326,6 +397,50 @@ export default function LeadDetailPage() {
             {message}
           </div>
         )}
+
+        {/* ACTIONS COMMERCIALES */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>
+              Actions commerciales
+            </CardTitle>
+
+            <CardDescription>
+              Contactez directement ce prospect depuis sa fiche.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Button
+                type="button"
+                onClick={handleWhatsApp}
+                disabled={
+                  !lead.contact.whatsappId &&
+                  !lead.contact.phone
+                }
+              >
+                💬 WhatsApp
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleCall}
+                disabled={!lead.contact.phone}
+              >
+                📞 Appeler
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleEmail}
+                disabled={!lead.contact.email}
+              >
+                ✉️ Envoyer un email
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* INFORMATIONS */}
@@ -554,7 +669,11 @@ export default function LeadDetailPage() {
                           (item) => {
                             const isUser =
                               item.role ===
-                              "user";
+                                "user" ||
+                              item.senderType ===
+                                "CONTACT" ||
+                              item.direction ===
+                                "INBOUND";
 
                             return (
                               <div
@@ -579,7 +698,8 @@ export default function LeadDetailPage() {
                                   </p>
 
                                   <p className="whitespace-pre-wrap leading-6">
-                                    {item.content}
+                                    {item.content ||
+                                      "Message vide"}
                                   </p>
 
                                   <p className="mt-2 text-[10px] opacity-40">
