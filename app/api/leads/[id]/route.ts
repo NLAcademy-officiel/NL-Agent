@@ -28,69 +28,16 @@ async function getAuthenticatedSession() {
   return getSession(token);
 }
 
-/*
- * Récupérer un prospect avec :
- * Lead
- * └── Contact
- *     └── Conversations
- *         └── Messages
- */
-async function findLeadWithRelations(
-  leadId: string,
-  organizationId: string
-) {
-  const lead = await prisma.lead.findFirst({
-    where: {
-      id: leadId,
-      organizationId,
-    },
-    include: {
-      contact: {
-        include: {
-          conversations: {
-            include: {
-              messages: {
-                orderBy: {
-                  createdAt: "asc",
-                },
-              },
-            },
-            orderBy: {
-              updatedAt: "desc",
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!lead) {
-    return null;
-  }
-
-  /*
-   * Le frontend LeadDetailPage attend :
-   *
-   * lead.contact
-   * lead.conversations
-   *
-   * Or Prisma possède la relation :
-   *
-   * Lead → Contact → Conversations
-   *
-   * On expose donc les conversations directement
-   * sur l'objet lead pour simplifier le frontend.
-   */
-  return {
-    ...lead,
-    conversations: lead.contact.conversations,
-  };
-}
-
-/*
- * GET
- * Récupérer un prospect avec ses coordonnées
- * et son historique de conversations.
+/**
+ * GET /api/leads/[id]
+ *
+ * Récupère un prospect avec :
+ * - ses informations de contact
+ * - ses conversations
+ * - les messages de chaque conversation
+ *
+ * Le prospect doit appartenir à l'organisation
+ * de l'utilisateur connecté.
  */
 export async function GET(
   request: Request,
@@ -108,22 +55,40 @@ export async function GET(
       );
     }
 
-    const leadId = String(params.id ?? "").trim();
+    const leadId = params?.id;
 
     if (!leadId) {
       return NextResponse.json(
         {
-          error:
-            "L'identifiant du prospect est obligatoire.",
+          error: "L'identifiant du prospect est obligatoire.",
         },
         { status: 400 }
       );
     }
 
-    const lead = await findLeadWithRelations(
-      leadId,
-      session.organizationId
-    );
+    const lead = await prisma.lead.findFirst({
+      where: {
+        id: leadId,
+        organizationId: session.organizationId,
+      },
+      include: {
+        contact: true,
+
+        conversations: {
+          orderBy: {
+            updatedAt: "desc",
+          },
+
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
+        },
+      },
+    });
 
     if (!lead) {
       return NextResponse.json(
@@ -137,24 +102,31 @@ export async function GET(
     return NextResponse.json({
       success: true,
       lead,
+      conversations: lead.conversations,
     });
   } catch (error) {
     console.error("Get lead error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Impossible de récupérer le prospect.",
+        error: "Impossible de récupérer le prospect.",
       },
       { status: 500 }
     );
   }
 }
 
-/*
- * PATCH
- * Modifier le statut, le score, les notes
- * et/ou la source d'un prospect.
+/**
+ * PATCH /api/leads/[id]
+ *
+ * Met à jour :
+ * - le statut
+ * - le score
+ * - les notes
+ * - la source
+ *
+ * Le prospect doit appartenir à l'organisation
+ * de l'utilisateur connecté.
  */
 export async function PATCH(
   request: Request,
@@ -172,22 +144,17 @@ export async function PATCH(
       );
     }
 
-    const leadId = String(params.id ?? "").trim();
+    const leadId = params?.id;
 
     if (!leadId) {
       return NextResponse.json(
         {
-          error:
-            "L'identifiant du prospect est obligatoire.",
+          error: "L'identifiant du prospect est obligatoire.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * Vérification que le prospect appartient
-     * bien à l'organisation de la session.
-     */
     const existingLead = await prisma.lead.findFirst({
       where: {
         id: leadId,
@@ -204,17 +171,26 @@ export async function PATCH(
       );
     }
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
 
-    /*
-     * STATUT
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          error: "Le corps de la requête est invalide.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /**
+     * STATUS
      */
     let status: LeadStatus | undefined;
 
     if (body.status !== undefined) {
-      const requestedStatus = String(
-        body.status
-      ).trim();
+      const requestedStatus = String(body.status).trim();
 
       if (
         !VALID_STATUSES.includes(
@@ -224,6 +200,7 @@ export async function PATCH(
         return NextResponse.json(
           {
             error: "Statut de prospect invalide.",
+            validStatuses: VALID_STATUSES,
           },
           { status: 400 }
         );
@@ -232,17 +209,10 @@ export async function PATCH(
       status = requestedStatus as LeadStatus;
     }
 
-    /*
+    /**
      * SCORE
-     *
-     * undefined → ne pas modifier
-     * null / ""  → supprimer le score
-     * nombre     → score entre 0 et 100
      */
-    let score:
-      | number
-      | null
-      | undefined = undefined;
+    let score: number | null | undefined = undefined;
 
     if (
       body.score === null ||
@@ -250,55 +220,66 @@ export async function PATCH(
     ) {
       score = null;
     } else if (body.score !== undefined) {
-      const parsedScore = Number(body.score);
+      const numericScore = Number(body.score);
 
       if (
-        Number.isNaN(parsedScore) ||
-        parsedScore < 0 ||
-        parsedScore > 100
+        !Number.isFinite(numericScore) ||
+        !Number.isInteger(numericScore) ||
+        numericScore < 0 ||
+        numericScore > 100
       ) {
         return NextResponse.json(
           {
             error:
-              "Le score doit être compris entre 0 et 100.",
+              "Le score doit être un nombre entier compris entre 0 et 100.",
           },
           { status: 400 }
         );
       }
 
-      score = parsedScore;
+      score = numericScore;
     }
 
-    /*
+    /**
      * NOTES
      */
-    let notes: string | undefined = undefined;
+    let notes: string | null | undefined = undefined;
 
     if (body.notes !== undefined) {
-      notes = String(body.notes).trim();
+      if (
+        body.notes === null ||
+        String(body.notes).trim() === ""
+      ) {
+        notes = null;
+      } else {
+        notes = String(body.notes).trim();
+      }
     }
 
-    /*
+    /**
      * SOURCE
      */
-    let source: string | undefined = undefined;
+    let source: string | null | undefined = undefined;
 
     if (body.source !== undefined) {
-      source = String(body.source).trim();
+      if (
+        body.source === null ||
+        String(body.source).trim() === ""
+      ) {
+        source = null;
+      } else {
+        source = String(body.source).trim();
+      }
     }
 
-    /*
-     * Mise à jour du prospect.
-     *
-     * IMPORTANT :
-     * organizationId n'est pas utilisé directement
-     * dans le where du update car la vérification
-     * d'appartenance a déjà été effectuée juste avant.
+    /**
+     * Mise à jour
      */
-    await prisma.lead.update({
+    const updatedLead = await prisma.lead.update({
       where: {
-        id: existingLead.id,
+        id: leadId,
       },
+
       data: {
         ...(status !== undefined && {
           status,
@@ -309,40 +290,38 @@ export async function PATCH(
         }),
 
         ...(notes !== undefined && {
-          notes: notes || null,
+          notes,
         }),
 
         ...(source !== undefined && {
-          source: source || null,
+          source,
         }),
       },
-    });
 
-    /*
-     * On recharge le prospect avec toutes ses relations
-     * afin que la réponse soit immédiatement compatible
-     * avec LeadDetailPage.
-     */
-    const updatedLead = await findLeadWithRelations(
-      existingLead.id,
-      session.organizationId
-    );
+      include: {
+        contact: true,
 
-    if (!updatedLead) {
-      return NextResponse.json(
-        {
-          error:
-            "Le prospect a été modifié mais ne peut pas être rechargé.",
+        conversations: {
+          orderBy: {
+            updatedAt: "desc",
+          },
+
+          include: {
+            messages: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
         },
-        { status: 500 }
-      );
-    }
+      },
+    });
 
     return NextResponse.json({
       success: true,
       lead: updatedLead,
-      message:
-        "Prospect mis à jour avec succès.",
+      conversations: updatedLead.conversations,
+      message: "Prospect mis à jour avec succès.",
     });
   } catch (error) {
     console.error("Update lead error:", error);
