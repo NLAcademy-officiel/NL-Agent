@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import {
   Card,
@@ -11,9 +10,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 type LeadStatus =
   | "NEW"
@@ -33,6 +32,7 @@ type Contact = {
 
 type Lead = {
   id: string;
+  contactId: string;
   status: LeadStatus;
   source: string | null;
   notes: string | null;
@@ -42,7 +42,7 @@ type Lead = {
   contact: Contact;
 };
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+const statusLabels: Record<LeadStatus, string> = {
   NEW: "Nouveau",
   CONTACTED: "Contacté",
   QUALIFIED: "Qualifié",
@@ -53,67 +53,49 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
-
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] =
-    useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState<LeadStatus | "ALL">("ALL");
 
-  const [editingId, setEditingId] =
-    useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [whatsappId, setWhatsappId] = useState("");
   const [source, setSource] = useState("");
-  const [notes, setNotes] = useState("");
-  const [status, setStatus] =
-    useState<LeadStatus>("NEW");
   const [score, setScore] = useState("");
+  const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState<LeadStatus>("NEW");
+
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  /*
-   * Charger les prospects
-   */
   async function loadLeads() {
     try {
-      setLoading(true);
       setError("");
 
-      const params = new URLSearchParams();
-
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      const response = await fetch(
-        `/api/leads?${params.toString()}`,
-        {
-          cache: "no-store",
-        }
-      );
+      const response = await fetch("/api/leads");
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
+        setError(
           result.error ||
             "Impossible de charger les prospects."
         );
+        return;
       }
 
       setLeads(result.leads || []);
-    } catch (error) {
-      console.error("Load leads error:", error);
-
-      setError(
-        "Impossible de charger les prospects."
-      );
+    } catch {
+      setError("Impossible de contacter le serveur.");
     } finally {
       setLoading(false);
     }
@@ -123,71 +105,42 @@ export default function LeadsPage() {
     loadLeads();
   }, []);
 
-  /*
-   * Recherche
-   */
-  function handleSearch(event: FormEvent) {
-    event.preventDefault();
-    loadLeads();
+  function resetForm() {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setWhatsappId("");
+    setSource("");
+    setScore("");
+    setNotes("");
+    setStatus("NEW");
   }
 
-  /*
-   * Ajouter ou modifier un prospect
-   */
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    if (
-      !name.trim() &&
-      !email.trim() &&
-      !phone.trim() &&
-      !whatsappId.trim()
-    ) {
-      setError(
-        "Veuillez renseigner au moins un nom, un e-mail, un téléphone ou un identifiant WhatsApp."
-      );
-      return;
-    }
-
-    setSaving(true);
-    setError("");
     setMessage("");
+    setError("");
+    setSaving(true);
 
     try {
-      const isEditing = Boolean(editingId);
-
       const response = await fetch("/api/leads", {
-        method: isEditing ? "PUT" : "POST",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(
-          isEditing
-            ? {
-                id: editingId,
-                name,
-                email,
-                phone,
-                whatsappId,
-                source,
-                notes,
-                status,
-                score:
-                  score.trim() === ""
-                    ? null
-                    : Number(score),
-              }
-            : {
-                name,
-                email,
-                phone,
-                whatsappId,
-                source,
-                notes,
-              }
-        ),
+        body: JSON.stringify({
+          name: name.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+          whatsappId: whatsappId.trim() || undefined,
+          source: source.trim() || undefined,
+          score: score ? Number(score) : undefined,
+          notes: notes.trim() || undefined,
+          status,
+        }),
       });
 
       const result = await response.json();
@@ -195,102 +148,27 @@ export default function LeadsPage() {
       if (!response.ok) {
         setError(
           result.error ||
-            "Impossible d'enregistrer le prospect."
+            "Impossible de créer le prospect."
         );
         return;
       }
 
-      if (isEditing) {
-        setLeads((current) =>
-          current.map((lead) =>
-            lead.id === result.lead.id
-              ? result.lead
-              : lead
-          )
-        );
-
-        setMessage(
-          "Prospect mis à jour avec succès."
-        );
-      } else {
-        setLeads((current) => [
-          result.lead,
-          ...current,
-        ]);
-
-        setMessage(
-          "Prospect créé avec succès."
-        );
-      }
+      setLeads((current) => [
+        result.lead,
+        ...current,
+      ]);
 
       resetForm();
-    } catch (error) {
-      console.error("Save lead error:", error);
+      setShowForm(false);
 
-      setError(
-        "Impossible de contacter le serveur."
-      );
+      setMessage("Prospect créé avec succès.");
+    } catch {
+      setError("Impossible de contacter le serveur.");
     } finally {
       setSaving(false);
     }
   }
 
-  /*
-   * Modifier
-   */
-  function handleEdit(lead: Lead) {
-    setEditingId(lead.id);
-
-    setName(lead.contact.name || "");
-    setEmail(lead.contact.email || "");
-    setPhone(lead.contact.phone || "");
-    setWhatsappId(lead.contact.whatsappId || "");
-
-    setSource(lead.source || "");
-    setNotes(lead.notes || "");
-    setStatus(lead.status);
-    setScore(
-      lead.score !== null
-        ? String(lead.score)
-        : ""
-    );
-
-    setMessage("");
-    setError("");
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
-
-  /*
-   * Réinitialiser le formulaire
-   */
-  function resetForm() {
-    setEditingId(null);
-    setName("");
-    setEmail("");
-    setPhone("");
-    setWhatsappId("");
-    setSource("");
-    setNotes("");
-    setStatus("NEW");
-    setScore("");
-  }
-
-  /*
-   * Annuler modification
-   */
-  function handleCancel() {
-    resetForm();
-    setMessage("");
-    setError("");
-  }
-
-  /*
-   * Supprimer
-   */
   async function handleDelete(id: string) {
     const confirmed = window.confirm(
       "Voulez-vous vraiment supprimer ce prospect ?"
@@ -300,20 +178,17 @@ export default function LeadsPage() {
       return;
     }
 
-    setDeletingId(id);
-    setError("");
     setMessage("");
+    setError("");
+    setDeletingId(id);
 
     try {
-      const response = await fetch("/api/leads", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id,
-        }),
-      });
+      const response = await fetch(
+        `/api/leads?id=${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       const result = await response.json();
 
@@ -329,25 +204,52 @@ export default function LeadsPage() {
         current.filter((lead) => lead.id !== id)
       );
 
-      if (editingId === id) {
-        resetForm();
-      }
-
-      setMessage(
-        "Prospect supprimé avec succès."
-      );
-    } catch (error) {
-      console.error(
-        "Delete lead error:",
-        error
-      );
-
-      setError(
-        "Impossible de contacter le serveur."
-      );
+      setMessage("Prospect supprimé avec succès.");
+    } catch {
+      setError("Impossible de contacter le serveur.");
     } finally {
       setDeletingId(null);
     }
+  }
+
+  const filteredLeads = leads.filter((lead) => {
+    const contact = lead.contact;
+
+    const searchText = [
+      contact.name,
+      contact.email,
+      contact.phone,
+      contact.whatsappId,
+      lead.source,
+      lead.notes,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const matchesSearch = searchText.includes(
+      search.toLowerCase()
+    );
+
+    const matchesStatus =
+      statusFilter === "ALL" ||
+      lead.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  if (loading) {
+    return (
+      <>
+        <DashboardTopbar title="Prospects" />
+
+        <div className="p-6">
+          <p className="text-sm text-white/60">
+            Chargement des prospects...
+          </p>
+        </div>
+      </>
+    );
   }
 
   return (
@@ -355,19 +257,35 @@ export default function LeadsPage() {
       <DashboardTopbar title="Prospects" />
 
       <div className="p-6">
-        <div className="mb-6">
-          <Badge variant="neutral">
-            Phase 8 — Gestion des prospects
-          </Badge>
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <Badge variant="neutral">
+              Gestion commerciale
+            </Badge>
 
-          <h1 className="mt-4 text-2xl font-semibold text-white">
-            Prospects
-          </h1>
+            <h1 className="mt-4 text-2xl font-semibold text-white">
+              Prospects
+            </h1>
 
-          <p className="mt-2 max-w-2xl text-sm text-white/60">
-            Gérez vos prospects, leur statut, leurs
-            coordonnées et leur niveau de qualification.
-          </p>
+            <p className="mt-2 max-w-2xl text-sm text-white/60">
+              Retrouvez et gérez les prospects générés par
+              NL Agent ainsi que vos prospects ajoutés
+              manuellement.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            onClick={() => {
+              setShowForm((value) => !value);
+              setMessage("");
+              setError("");
+            }}
+          >
+            {showForm
+              ? "Fermer"
+              : "Ajouter un prospect"}
+          </Button>
         </div>
 
         {error && (
@@ -382,20 +300,16 @@ export default function LeadsPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-          {/* FORMULAIRE */}
-          <Card>
+        {showForm && (
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle>
-                {editingId
-                  ? "Modifier le prospect"
-                  : "Ajouter un prospect"}
+                Ajouter un prospect
               </CardTitle>
 
               <CardDescription>
-                {editingId
-                  ? "Modifiez les informations du prospect."
-                  : "Ajoutez manuellement un nouveau prospect."}
+                Ajoutez manuellement un prospect à votre
+                portefeuille commercial.
               </CardDescription>
             </CardHeader>
 
@@ -404,149 +318,130 @@ export default function LeadsPage() {
                 onSubmit={handleSubmit}
                 className="space-y-5"
               >
-                <div>
-                  <Label htmlFor="lead-name">
-                    Nom
-                  </Label>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="lead-name">
+                      Nom
+                    </Label>
 
-                  <Input
-                    id="lead-name"
-                    value={name}
-                    onChange={(event) =>
-                      setName(event.target.value)
-                    }
-                    placeholder="Exemple : Jean Dupont"
-                  />
+                    <Input
+                      id="lead-name"
+                      value={name}
+                      onChange={(event) =>
+                        setName(event.target.value)
+                      }
+                      placeholder="Nom du prospect"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-email">
+                      Email
+                    </Label>
+
+                    <Input
+                      id="lead-email"
+                      type="email"
+                      value={email}
+                      onChange={(event) =>
+                        setEmail(event.target.value)
+                      }
+                      placeholder="prospect@email.com"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-phone">
+                      Téléphone
+                    </Label>
+
+                    <Input
+                      id="lead-phone"
+                      value={phone}
+                      onChange={(event) =>
+                        setPhone(event.target.value)
+                      }
+                      placeholder="+225..."
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-whatsapp">
+                      Identifiant WhatsApp
+                    </Label>
+
+                    <Input
+                      id="lead-whatsapp"
+                      value={whatsappId}
+                      onChange={(event) =>
+                        setWhatsappId(event.target.value)
+                      }
+                      placeholder="Identifiant WhatsApp"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-source">
+                      Source
+                    </Label>
+
+                    <Input
+                      id="lead-source"
+                      value={source}
+                      onChange={(event) =>
+                        setSource(event.target.value)
+                      }
+                      placeholder="Exemple : WhatsApp"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-score">
+                      Score / 100
+                    </Label>
+
+                    <Input
+                      id="lead-score"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={score}
+                      onChange={(event) =>
+                        setScore(event.target.value)
+                      }
+                      placeholder="Exemple : 75"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="lead-status">
+                      Statut
+                    </Label>
+
+                    <select
+                      id="lead-status"
+                      value={status}
+                      onChange={(event) =>
+                        setStatus(
+                          event.target
+                            .value as LeadStatus
+                        )
+                      }
+                      className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white outline-none"
+                    >
+                      {Object.entries(statusLabels).map(
+                        ([value, label]) => (
+                          <option
+                            key={value}
+                            value={value}
+                          >
+                            {label}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
                 </div>
-
-                <div>
-                  <Label htmlFor="lead-email">
-                    E-mail
-                  </Label>
-
-                  <Input
-                    id="lead-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) =>
-                      setEmail(event.target.value)
-                    }
-                    placeholder="jean@email.com"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="lead-phone">
-                    Téléphone
-                  </Label>
-
-                  <Input
-                    id="lead-phone"
-                    value={phone}
-                    onChange={(event) =>
-                      setPhone(event.target.value)
-                    }
-                    placeholder="+225..."
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="lead-whatsapp">
-                    WhatsApp ID
-                  </Label>
-
-                  <Input
-                    id="lead-whatsapp"
-                    value={whatsappId}
-                    onChange={(event) =>
-                      setWhatsappId(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Identifiant WhatsApp"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="lead-source">
-                    Source
-                  </Label>
-
-                  <Input
-                    id="lead-source"
-                    value={source}
-                    onChange={(event) =>
-                      setSource(event.target.value)
-                    }
-                    placeholder="Exemple : WhatsApp, Facebook, Site..."
-                  />
-                </div>
-
-                {editingId && (
-                  <>
-                    <div>
-                      <Label htmlFor="lead-status">
-                        Statut
-                      </Label>
-
-                      <select
-                        id="lead-status"
-                        value={status}
-                        onChange={(event) =>
-                          setStatus(
-                            event.target
-                              .value as LeadStatus
-                          )
-                        }
-                        className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
-                      >
-                        <option value="NEW">
-                          Nouveau
-                        </option>
-
-                        <option value="CONTACTED">
-                          Contacté
-                        </option>
-
-                        <option value="QUALIFIED">
-                          Qualifié
-                        </option>
-
-                        <option value="NEGOTIATION">
-                          Négociation
-                        </option>
-
-                        <option value="WON">
-                          Gagné
-                        </option>
-
-                        <option value="LOST">
-                          Perdu
-                        </option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="lead-score">
-                        Score
-                      </Label>
-
-                      <Input
-                        id="lead-score"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={score}
-                        onChange={(event) =>
-                          setScore(
-                            event.target.value
-                          )
-                        }
-                        placeholder="0 - 100"
-                      />
-                    </div>
-                  </>
-                )}
 
                 <div>
                   <Label htmlFor="lead-notes">
@@ -565,198 +460,224 @@ export default function LeadsPage() {
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex gap-3">
                   <Button
                     type="submit"
                     disabled={saving}
                   >
                     {saving
-                      ? "Enregistrement..."
-                      : editingId
-                      ? "Enregistrer les modifications"
-                      : "Ajouter le prospect"}
+                      ? "Création..."
+                      : "Créer le prospect"}
                   </Button>
 
-                  {editingId && (
-                    <Button
-                      type="button"
-                      onClick={handleCancel}
-                      disabled={saving}
-                    >
-                      Annuler
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setShowForm(false);
+                    }}
+                    disabled={saving}
+                  >
+                    Annuler
+                  </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
+        )}
 
-          {/* LISTE */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Liste des prospects
-              </CardTitle>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>
+              Recherche et filtres
+            </CardTitle>
+          </CardHeader>
 
-              <CardDescription>
-                {leads.length} prospect
-                {leads.length > 1 ? "s" : ""}
-              </CardDescription>
-            </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="lead-search">
+                  Rechercher
+                </Label>
 
-            <CardContent>
-              {/* RECHERCHE */}
-              <form
-                onSubmit={handleSearch}
-                className="mb-6 flex gap-3"
-              >
                 <Input
+                  id="lead-search"
                   value={search}
                   onChange={(event) =>
                     setSearch(event.target.value)
                   }
-                  placeholder="Rechercher un prospect..."
+                  placeholder="Nom, email, téléphone, source..."
                 />
+              </div>
 
-                <Button type="submit">
-                  Rechercher
-                </Button>
-              </form>
+              <div>
+                <Label htmlFor="lead-filter">
+                  Filtrer par statut
+                </Label>
 
-              {loading ? (
+                <select
+                  id="lead-filter"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(
+                      event.target.value as
+                        | LeadStatus
+                        | "ALL"
+                    )
+                  }
+                  className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="ALL">
+                    Tous les statuts
+                  </option>
+
+                  {Object.entries(statusLabels).map(
+                    ([value, label]) => (
+                      <option
+                        key={value}
+                        value={value}
+                      >
+                        {label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Liste des prospects
+            </CardTitle>
+
+            <CardDescription>
+              {filteredLeads.length} prospect
+              {filteredLeads.length > 1 ? "s" : ""} affiché
+              {filteredLeads.length > 1 ? "s" : ""}.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            {filteredLeads.length === 0 ? (
+              <div className="rounded-md border border-dashed border-line bg-ink p-8 text-center">
                 <p className="text-sm text-white/50">
-                  Chargement des prospects...
+                  Aucun prospect trouvé.
                 </p>
-              ) : leads.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-line p-8 text-center">
-                  <p className="text-sm font-medium text-white">
-                    Aucun prospect
-                  </p>
 
-                  <p className="mt-2 text-sm text-white/40">
-                    Ajoutez votre premier prospect
-                    pour commencer.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {leads.map((lead) => (
+                <p className="mt-2 text-xs text-white/30">
+                  Les prospects créés par les conversations
+                  de NL Agent apparaîtront ici.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredLeads.map((lead) => {
+                  const contact = lead.contact;
+
+                  return (
                     <div
                       key={lead.id}
-                      className="rounded-lg border border-line bg-ink p-4"
+                      className="rounded-lg border border-line bg-ink p-5"
                     >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-semibold text-white">
-                            {lead.contact.name ||
-                              "Prospect sans nom"}
-                          </h3>
+                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-base font-semibold text-white">
+                              {contact.name ||
+                                "Prospect sans nom"}
+                            </h3>
 
-                          <div className="mt-2 space-y-1 text-sm text-white/50">
-                            {lead.contact.email && (
+                            <Badge variant="neutral">
+                              {
+                                statusLabels[
+                                  lead.status
+                                ]
+                              }
+                            </Badge>
+
+                            {lead.score !== null && (
+                              <span className="text-xs text-white/50">
+                                Score : {lead.score}/100
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-4 grid gap-2 text-sm text-white/60 md:grid-cols-2">
+                            {contact.email && (
                               <p>
-                                {lead.contact.email}
+                                📧 {contact.email}
                               </p>
                             )}
 
-                            {lead.contact.phone && (
+                            {contact.phone && (
                               <p>
-                                {lead.contact.phone}
+                                📱 {contact.phone}
                               </p>
                             )}
 
-                            {lead.contact
-                              .whatsappId && (
+                            {contact.whatsappId && (
                               <p>
-                                WhatsApp :{" "}
-                                {
-                                  lead.contact
-                                    .whatsappId
-                                }
+                                💬 WhatsApp :{" "}
+                                {contact.whatsappId}
+                              </p>
+                            )}
+
+                            {lead.source && (
+                              <p>
+                                🌐 Source :{" "}
+                                {lead.source}
                               </p>
                             )}
                           </div>
-                        </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-line px-3 py-1 text-xs text-white/60">
-                            {
-                              STATUS_LABELS[
-                                lead.status
-                              ]
-                            }
-                          </span>
+                          {lead.notes && (
+                            <div className="mt-4 rounded-md border border-line p-3">
+                              <p className="text-xs font-medium text-white/40">
+                                Notes
+                              </p>
 
-                          {lead.score !== null && (
-                            <span className="rounded-full border border-line px-3 py-1 text-xs text-white/60">
-                              Score : {lead.score}
-                            </span>
+                              <p className="mt-1 whitespace-pre-wrap text-sm text-white/60">
+                                {lead.notes}
+                              </p>
+                            </div>
                           )}
+
+                          <p className="mt-4 text-xs text-white/30">
+                            Créé le{" "}
+                            {new Date(
+                              lead.createdAt
+                            ).toLocaleDateString(
+                              "fr-FR"
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 gap-2">
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(lead.id)
+                            }
+                            disabled={
+                              deletingId === lead.id
+                            }
+                          >
+                            {deletingId === lead.id
+                              ? "Suppression..."
+                              : "Supprimer"}
+                          </Button>
                         </div>
                       </div>
-
-                      {lead.source && (
-                        <p className="mt-4 text-xs text-white/40">
-                          Source : {lead.source}
-                        </p>
-                      )}
-
-                      {lead.notes && (
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/50">
-                          {lead.notes}
-                        </p>
-                      )}
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          onClick={() =>
-                            handleEdit(lead)
-                          }
-                          disabled={
-                            deletingId === lead.id
-                          }
-                        >
-                          Modifier
-                        </Button>
-
-                        <Button
-                          type="button"
-                          onClick={() =>
-                            handleDelete(lead.id)
-                          }
-                          disabled={
-                            deletingId === lead.id
-                          }
-                        >
-                          {deletingId === lead.id
-                            ? "Suppression..."
-                            : "Supprimer"}
-                        </Button>
-                      </div>
-
-                      <p className="mt-4 text-xs text-white/30">
-                        Créé le{" "}
-                        {new Intl.DateTimeFormat(
-                          "fr-FR",
-                          {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          }
-                        ).format(
-                          new Date(
-                            lead.createdAt
-                          )
-                        )}
-                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </>
   );
