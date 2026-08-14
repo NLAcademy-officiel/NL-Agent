@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import {
   Card,
@@ -81,7 +83,9 @@ export default function LeadsPage() {
     try {
       setError("");
 
-      const response = await fetch("/api/leads");
+      const response = await fetch("/api/leads", {
+        cache: "no-store",
+      });
 
       const result = await response.json();
 
@@ -135,9 +139,12 @@ export default function LeadsPage() {
           name: name.trim() || undefined,
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
-          whatsappId: whatsappId.trim() || undefined,
+          whatsappId:
+            whatsappId.trim() || undefined,
           source: source.trim() || undefined,
-          score: score ? Number(score) : undefined,
+          score: score
+            ? Number(score)
+            : undefined,
           notes: notes.trim() || undefined,
           status,
         }),
@@ -429,7 +436,9 @@ export default function LeadsPage() {
                       }
                       className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white outline-none"
                     >
-                      {Object.entries(statusLabels).map(
+                      {Object.entries(
+                        statusLabels
+                      ).map(
                         ([value, label]) => (
                           <option
                             key={value}
@@ -531,7 +540,9 @@ export default function LeadsPage() {
                     Tous les statuts
                   </option>
 
-                  {Object.entries(statusLabels).map(
+                  {Object.entries(
+                    statusLabels
+                  ).map(
                     ([value, label]) => (
                       <option
                         key={value}
@@ -555,8 +566,14 @@ export default function LeadsPage() {
 
             <CardDescription>
               {filteredLeads.length} prospect
-              {filteredLeads.length > 1 ? "s" : ""} affiché
-              {filteredLeads.length > 1 ? "s" : ""}.
+              {filteredLeads.length > 1
+                ? "s"
+                : ""}{" "}
+              affiché
+              {filteredLeads.length > 1
+                ? "s"
+                : ""}
+              .
             </CardDescription>
           </CardHeader>
 
@@ -655,14 +672,25 @@ export default function LeadsPage() {
                           </p>
                         </div>
 
-                        <div className="flex shrink-0 gap-2">
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Link
+                            href={`/dashboard/leads/${lead.id}`}
+                          >
+                            <Button type="button">
+                              Voir le prospect
+                            </Button>
+                          </Link>
+
                           <Button
                             type="button"
                             onClick={() =>
-                              handleDelete(lead.id)
+                              handleDelete(
+                                lead.id
+                              )
                             }
                             disabled={
-                              deletingId === lead.id
+                              deletingId ===
+                              lead.id
                             }
                           >
                             {deletingId === lead.id
