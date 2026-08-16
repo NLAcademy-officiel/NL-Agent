@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NLAssistantWidget from "@/components/chat/NLAssistantWidget";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -125,6 +126,7 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+      <NLAssistantWidget />
     </>
   );
 }
