@@ -1,26 +1,41 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 import { prisma } from "@/lib/database/prisma";
 
 type ChariowPulse = {
 event?: string;
+
 sale?: {
 id?: string;
-status?: string;
-amount?: number;
+amount?: {
+value?: number;
+formatted?: string;
+short?: string;
 currency?: string;
-created_at?: string;
 };
+original_amount?: {
+value?: number;
+formatted?: string;
+short?: string;
+currency?: string;
+};
+};
+
 product?: {
 id?: string;
 name?: string;
 };
+
 customer?: {
 id?: string;
 name?: string;
+first_name?: string;
+last_name?: string;
 email?: string;
 phone?: string;
 };
+
 store?: {
 id?: string;
 name?: string;
@@ -33,9 +48,69 @@ prd_64bi5h5w: "Business",
 prd_krai669t: "Pro",
 };
 
+function verifySignature(
+rawBody: string,
+signature: string | null,
+secret: string
+) {
+if (!signature) {
+return false;
+}
+
+const expectedSignature = crypto
+.createHmac("sha256", secret)
+.update(rawBody)
+.digest("hex");
+
+const received = Buffer.from(signature, "utf8");
+const expected = Buffer.from(expectedSignature, "utf8");
+
+if (received.length !== expected.length) {
+return false;
+}
+
+return crypto.timingSafeEqual(received, expected);
+}
+
 export async function POST(request: Request) {
 try {
-const body = (await request.json()) as ChariowPulse;
+const secret = process.env.CHARIOW_PULSE_SECRET;
+
+if (!secret) {
+console.error("CHARIOW_PULSE_SECRET is not configured.");
+
+return NextResponse.json(
+{
+success: false,
+error: "Webhook secret is not configured.",
+},
+{ status: 500 }
+);
+}
+
+const rawBody = await request.text();
+
+const signature = request.headers.get("x-chariow-signature");
+
+const isValid = verifySignature(
+rawBody,
+signature,
+secret
+);
+
+if (!isValid) {
+console.warn("Invalid Chariow webhook signature.");
+
+return NextResponse.json(
+{
+success: false,
+error: "Invalid signature.",
+},
+{ status: 401 }
+);
+}
+
+const body = JSON.parse(rawBody) as ChariowPulse;
 
 console.log("Chariow Pulse received:", body);
 
@@ -71,7 +146,9 @@ message: "Product not configured.",
 });
 }
 
-const customerEmail = body.customer?.email?.trim().toLowerCase();
+const customerEmail = body.customer?.email
+?.trim()
+.toLowerCase();
 
 if (!customerEmail) {
 return NextResponse.json(
@@ -84,6 +161,16 @@ error: "Customer email missing.",
 }
 
 const saleId = body.sale?.id ?? null;
+
+if (!saleId) {
+return NextResponse.json(
+{
+success: false,
+error: "Sale ID missing.",
+},
+{ status: 400 }
+);
+}
 
 const user = await prisma.user.findUnique({
 where: {
@@ -110,24 +197,36 @@ const organizationId = user.organizationId;
 const existingSubscription =
 await prisma.chariowSubscription.findFirst({
 where: {
-organizationId,
-},
-orderBy: {
-startedAt: "desc",
+externalId: saleId,
 },
 });
+
+if (existingSubscription) {
+return NextResponse.json({
+success: true,
+alreadyProcessed: true,
+message: "This Chariow sale was already processed.",
+subscription: {
+id: existingSubscription.id,
+planName: existingSubscription.planName,
+status: existingSubscription.status,
+},
+});
+}
 
 const startedAt = new Date();
 
 const expiresAt = new Date(startedAt);
 expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-const subscriptionData = {
+const subscription =
+await prisma.chariowSubscription.create({
+data: {
 organizationId,
 externalId: saleId,
 productId,
 planName,
-status: "ACTIVE" as const,
+status: "ACTIVE",
 startedAt,
 expiresAt,
 metadata: {
@@ -138,33 +237,21 @@ customerEmail,
 customerName: body.customer?.name ?? null,
 customerPhone: body.customer?.phone ?? null,
 saleId,
-amount: body.sale?.amount ?? null,
-currency: body.sale?.currency ?? null,
+amount: body.sale?.amount?.value ?? null,
+currency:
+body.sale?.amount?.currency ?? null,
 productName: body.product?.name ?? null,
 storeId: body.store?.id ?? null,
 storeName: body.store?.name ?? null,
 },
-};
-
-let subscription;
-
-if (existingSubscription) {
-subscription = await prisma.chariowSubscription.update({
-where: {
-id: existingSubscription.id,
 },
-data: subscriptionData,
 });
-} else {
-subscription = await prisma.chariowSubscription.create({
-data: subscriptionData,
-});
-}
 
 return NextResponse.json({
 success: true,
 activated: true,
-message: "Chariow payment confirmed and subscription activated.",
+message:
+"Chariow payment confirmed and subscription activated.",
 subscription: {
 id: subscription.id,
 organizationId: subscription.organizationId,
