@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -15,33 +16,81 @@ const NAV = [
 ];
 
 export function DashboardSidebar() {
-  const pathname = usePathname();
+const pathname = usePathname();
+const [open, setOpen] = useState(false);
 
-  return (
-    <aside className="hidden w-64 shrink-0 border-r border-line bg-surface md:block">
-      <div className="flex h-16 items-center gap-2 border-b border-line px-6">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-500 text-xs font-bold text-white">
-          NL
-        </span>
-        <span className="text-sm font-semibold">NL Agent</span>
-      </div>
-      <nav className="flex flex-col gap-1 p-4">
-        {NAV.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white",
-                active && "bg-brand-500/15 text-brand-300",
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
-  );
+return (
+<>
+<div className="flex items-center justify-between border-b border-line bg-surface px-4 py-3 md:hidden">
+<div className="flex items-center gap-2">
+<span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-500 text-xs font-bold text-white">
+NL
+</span>
+<span className="text-sm font-semibold">NL Agent</span>
+</div>
+
+<button
+type="button"
+onClick={() => setOpen(!open)}
+aria-label="Ouvrir le menu"
+aria-expanded={open}
+className="rounded-lg border border-line px-3 py-2 text-white hover:bg-white/5"
+>
+{open ? "X" : "☰"}
+</button>
+</div>
+
+{open && (
+<div className="border-b border-line bg-surface px-4 py-3 md:hidden">
+<nav className="flex flex-col gap-1">
+{NAV.map((item) => {
+const active = pathname === item.href;
+
+return (
+<Link
+key={item.href}
+href={item.href}
+onClick={() => setOpen(false)}
+className={cn(
+"rounded-lg px-3 py-3 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white",
+active && "bg-brand-500/15 text-brand-300"
+)}
+>
+{item.label}
+</Link>
+);
+})}
+</nav>
+</div>
+)}
+
+<aside className="hidden w-64 shrink-0 border-r border-line bg-surface md:block">
+<div className="flex h-16 items-center gap-2 border-b border-line px-6">
+<span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-500 text-xs font-bold text-white">
+NL
+</span>
+<span className="text-sm font-semibold">NL Agent</span>
+</div>
+
+<nav className="flex flex-col gap-1 p-4">
+{NAV.map((item) => {
+const active = pathname === item.href;
+
+return (
+<Link
+key={item.href}
+href={item.href}
+className={cn(
+"rounded-lg px-3 py-2 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white",
+active && "bg-brand-500/15 text-brand-300"
+)}
+>
+{item.label}
+</Link>
+);
+})}
+</nav>
+</aside>
+</>
+);
 }
