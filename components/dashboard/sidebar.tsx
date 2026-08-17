@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/dashboard", label: "Vue d'ensemble" },
-  { href: "/dashboard/agent", label: "Mon agent" },
-  { href: "/dashboard/conversations", label: "Conversations" },
-  { href: "/dashboard/leads", label: "Prospects" },
-  { href: "/dashboard/statistiques", label: "Statistiques" },
-  { href: "/dashboard/parametres", label: "Paramètres" },
+{ href: "/dashboard", label: "Vue d'ensemble" },
+{ href: "/dashboard/agent", label: "Mon agent" },
+{ href: "/dashboard/conversations", label: "Conversations" },
+{ href: "/dashboard/leads", label: "Prospects" },
+{ href: "/dashboard/statistiques", label: "Statistiques" },
+{ href: "/dashboard/abonnement", label: "Abonnement" },
+{ href: "/dashboard/parametres", label: "Paramètres" },
 ];
 
 export function DashboardSidebar() {
