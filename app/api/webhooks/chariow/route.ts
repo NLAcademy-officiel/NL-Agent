@@ -57,7 +57,9 @@ if (!signature) {
 return false;
 }
 
-const expectedSignature = crypto
+const expectedSignature =
+"sha256=" +
+crypto
 .createHmac("sha256", secret)
 .update(rawBody)
 .digest("hex");
