@@ -104,28 +104,145 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* TARIFS (placeholder) */}
-      <section id="tarifs" className="border-b border-line">
-        <div className="mx-auto max-w-6xl px-6 py-24 text-center">
-          <Badge variant="neutral" className="mx-auto w-fit">Tarifs</Badge>
-          <h2 className="mt-5 text-3xl font-semibold sm:text-4xl">Des offres bientôt disponibles</h2>
-          <p className="mx-auto mt-4 max-w-xl text-white/60">
-            La grille tarifaire et la facturation seront mises en place dans une phase ultérieure du projet.
-          </p>
-        </div>
-      </section>
+      {/* TARIFS */}
+<section id="tarifs" className="border-b border-line">
+<div className="mx-auto max-w-6xl px-6 py-24">
+<div className="text-center">
+<Badge variant="neutral" className="mx-auto w-fit">
+Tarifs
+</Badge>
 
-      {/* CTA FINAL */}
-      <section>
-        <div className="mx-auto max-w-6xl px-6 py-24 text-center">
-          <h2 className="mx-auto max-w-xl text-3xl font-semibold sm:text-4xl">
-            Prêt à donner un agent commercial à votre entreprise ?
-          </h2>
-          <Link href="/auth/register" className="mt-8 inline-block">
-            <Button size="lg">Créer mon compte</Button>
-          </Link>
-        </div>
-      </section>
+<h2 className="mt-5 text-3xl font-semibold sm:text-4xl">
+Choisissez votre formule NL Agent
+</h2>
+
+<p className="mx-auto mt-4 max-w-2xl text-white/60">
+Des abonnements mensuels simples et adaptés à votre activité.
+Commencez avec la formule qui correspond le mieux à vos besoins.
+</p>
+</div>
+
+<div className="mt-12 grid gap-6 md:grid-cols-3">
+<div className="flex flex-col rounded-2xl border border-line bg-surface p-6">
+<h3 className="text-xl font-semibold">
+NL Agent Starter
+</h3>
+
+<p className="mt-2 text-sm text-white/60">
+Pour les indépendants et petites activités qui souhaitent
+automatiser leur relation avec leurs prospects.
+</p>
+
+<div className="mt-6">
+<span className="text-3xl font-bold">
+Starter
+</span>
+<span className="ml-2 text-sm text-white/50">
+/ mois
+</span>
+</div>
+
+<ul className="mt-6 space-y-3 text-sm text-white/70">
+<li>✓ Agent commercial IA</li>
+<li>✓ Qualification des prospects</li>
+<li>✓ Gestion des conversations</li>
+<li>✓ Tableau de bord</li>
+</ul>
+
+<a
+href="https://next-level-academy.mychariow.shop/prd_k4merxkk/checkout"
+target="_blank"
+rel="noopener noreferrer"
+className="mt-8 inline-flex items-center justify-center rounded-xl bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+>
+Choisir Starter
+</a>
+</div>
+
+<div className="relative flex flex-col rounded-2xl border border-brand-500 bg-brand-500/10 p-6">
+<div className="absolute -top-3 left-6 rounded-full bg-brand-500 px-3 py-1 text-xs font-semibold text-white">
+Recommandé
+</div>
+
+<h3 className="text-xl font-semibold">
+NL Agent Business
+</h3>
+
+<p className="mt-2 text-sm text-white/60">
+Pour les entreprises qui veulent automatiser davantage leur
+acquisition et leur suivi commercial.
+</p>
+
+<div className="mt-6">
+<span className="text-3xl font-bold">
+Business
+</span>
+<span className="ml-2 text-sm text-white/50">
+/ mois
+</span>
+</div>
+
+<ul className="mt-6 space-y-3 text-sm text-white/70">
+<li>✓ Tout le contenu de Starter</li>
+<li>✓ Qualification avancée</li>
+<li>✓ Gestion des prospects</li>
+<li>✓ Statistiques commerciales</li>
+<li>✓ Automatisations</li>
+</ul>
+
+<a
+href="https://next-level-academy.mychariow.shop/prd_64bi5h5w/checkout"
+target="_blank"
+rel="noopener noreferrer"
+className="mt-8 inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+>
+Choisir Business
+</a>
+</div>
+
+<div className="flex flex-col rounded-2xl border border-line bg-surface p-6">
+<h3 className="text-xl font-semibold">
+NL Agent Pro
+</h3>
+
+<p className="mt-2 text-sm text-white/60">
+Pour les entreprises qui souhaitent une solution plus complète
+pour leur développement commercial.
+</p>
+
+<div className="mt-6">
+<span className="text-3xl font-bold">
+Pro
+</span>
+<span className="ml-2 text-sm text-white/50">
+/ mois
+</span>
+</div>
+
+<ul className="mt-6 space-y-3 text-sm text-white/70">
+<li>✓ Tout le contenu de Business</li>
+<li>✓ Fonctionnalités avancées</li>
+<li>✓ Automatisation commerciale</li>
+<li>✓ Suivi des performances</li>
+<li>✓ Solution évolutive</li>
+</ul>
+
+<a
+href="https://next-level-academy.mychariow.shop/prd_krai669t/checkout"
+target="_blank"
+rel="noopener noreferrer"
+className="mt-8 inline-flex items-center justify-center rounded-xl bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+>
+Choisir Pro
+</a>
+</div>
+</div>
+
+<p className="mt-8 text-center text-xs text-white/40">
+Abonnement mensuel. Vous pouvez choisir la formule adaptée à vos besoins.
+</p>
+</div>
+</section>
       <NLAssistantWidget />
     </>
   );
