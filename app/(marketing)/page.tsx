@@ -135,7 +135,7 @@ automatiser leur relation avec leurs prospects.
 
 <div className="mt-6">
 <span className="text-3xl font-bold">
-Starter
+9 900 FCFA
 </span>
 <span className="ml-2 text-sm text-white/50">
 / mois
@@ -175,7 +175,7 @@ acquisition et leur suivi commercial.
 
 <div className="mt-6">
 <span className="text-3xl font-bold">
-Business
+24 900 FCFA
 </span>
 <span className="ml-2 text-sm text-white/50">
 / mois
@@ -212,7 +212,7 @@ pour leur développement commercial.
 
 <div className="mt-6">
 <span className="text-3xl font-bold">
-Pro
+49 900 FCFA
 </span>
 <span className="ml-2 text-sm text-white/50">
 / mois
