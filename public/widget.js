@@ -53,7 +53,7 @@ BOUTON NL BOT
 .nl-bot-button {
 position: fixed;
 right: 22px;
-bottom: 22px;
+bottom: 95px;
 width: 72px;
 height: 72px;
 border: 0;
@@ -448,7 +448,7 @@ FENÊTRE CHAT
 position: fixed;
 
 right: 22px;
-bottom: 108px;
+bottom: 181px;
 
 width: 370px;
 height: 560px;
@@ -578,6 +578,32 @@ background: #00a8ff;
 
 box-shadow:
 0 0 8px #00a8ff;
+}
+
+.nl-agent-close {
+margin-left: 8px;
+width: 32px;
+height: 32px;
+border: 0;
+border-radius: 50%;
+background: rgba(255,255,255,.10);
+color: white;
+font-size: 24px;
+line-height: 1;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: all .2s ease;
+}
+
+.nl-agent-close:hover {
+background: rgba(0,168,255,.25);
+transform: scale(1.08);
+}
+
+.nl-agent-close:active {
+transform: scale(.94);
 }
 
 .nl-agent-messages {
@@ -723,7 +749,7 @@ MOBILE
 @media (max-width: 600px) {
 .nl-bot-button {
 right: 15px;
-bottom: 15px;
+bottom: 85px;
 
 width: 64px;
 height: 64px;
@@ -731,7 +757,7 @@ height: 64px;
 
 .nl-agent-window {
 right: 10px;
-bottom: 90px;
+bottom: 155px;
 
 width: calc(100vw - 20px);
 
@@ -817,6 +843,13 @@ NL
 En ligne
 </div>
 
+<button
+class="nl-agent-close"
+type="button"
+aria-label="Fermer NL Assistant"
+>
+×
+</button>
 </div>
 
 <div class="nl-agent-messages"></div>
@@ -868,6 +901,12 @@ const sendButton =
 windowEl.querySelector(
 ".nl-agent-send"
 );
+
+  const closeButton =
+windowEl.querySelector(
+".nl-agent-close"
+);
+
 
 /* =========================================================
 MESSAGE
@@ -938,6 +977,19 @@ head.style.transform =
 }, 400);
 }
 }
+}
+);
+
+  /* =========================================================
+* FERMETURE
+* ========================================================= */
+
+closeButton.addEventListener(
+"click",
+function () {
+isOpen = false;
+windowEl.style.display = "none";
+button.focus();
 }
 );
 
