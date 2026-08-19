@@ -9,6 +9,7 @@ const openai = new OpenAI({
 
 type PublicChatBody = {
   message?: unknown;
+  widgetId?: unknown;
   conversationId?: unknown;
   name?: unknown;
   email?: unknown;
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
       (await request.json()) as PublicChatBody;
 
     const message = cleanString(body.message);
+    const widgetId = cleanString(body.widgetId);
     const conversationId = cleanString(
       body.conversationId
     );
@@ -70,31 +72,39 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * 3. Vérification de l'organisation
-     *
-     * Pour le lancement public de NL Agent,
-     * on utilise l'organisation NLAcademy.
-     *
-     * On récupère ici la première organisation
-     * disponible.
-     */
-    const organization =
-      await prisma.organization.findFirst({
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
+     /*
+* 3. Identification de l'organisation via le widgetId
+*/
+if (!widgetId) {
+return NextResponse.json(
+{
+error: "widgetId est obligatoire.",
+},
+{ status: 400 }
+);
+}
 
-    if (!organization) {
-      return NextResponse.json(
-        {
-          error:
-            "Aucune organisation n'est configurée.",
-        },
-        { status: 404 }
-      );
-    }
+const channelForWidget = await prisma.channel.findFirst({
+where: {
+widgetId,
+type: "WEBSITE",
+isActive: true,
+},
+include: {
+organization: true,
+},
+});
+
+if (!channelForWidget) {
+return NextResponse.json(
+{
+error: "Widget invalide ou désactivé.",
+},
+{ status: 404 }
+);
+}
+
+const organization = channelForWidget.organization;
 
     /*
      * 4. Récupération de l'agent actif

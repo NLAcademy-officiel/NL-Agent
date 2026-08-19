@@ -27,8 +27,8 @@ if (!session) {
 redirect("/auth/login");
 }
 
-// Seuls OWNER et ADMIN peuvent accéder à l'administration
-if (session.role !== "OWNER" && session.role !== "ADMIN") {
+// Seul le propriétaire de NL Agent peut accéder à l'administration
+if (session.role !== "OWNER") {
 redirect("/dashboard");
 }
 
