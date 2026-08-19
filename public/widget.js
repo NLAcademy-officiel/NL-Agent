@@ -622,6 +622,12 @@ transparent 35%
 #f7f9fb;
 }
 
+.nl-agent-message,
+.nl-agent-message * {
+color: #00A8FF !important;
+}
+
+
 .nl-agent-message {
 margin-bottom: 11px;
 
